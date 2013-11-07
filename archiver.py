@@ -11,10 +11,10 @@ def file_contents(file_name):
             f.close()
 
 #set up db - create new file if it doesn't exist yet
-conn = sqlite3.connect('temp.db')
-c = conn.cursor()
+conn = sqlite3.connect('temp.db')                   #Initialize a connection
+c = conn.cursor()                                   #create the cursor 'c'
 try:
-    c.execute("""
+    c.execute("""                                   
                 create table texts (
                 id integer NOT NULL,
                 file_name text NOT NULL,
@@ -25,25 +25,25 @@ except:pass
 
 folder="ovid"
 fileList=os.listdir(folder)
-counter=0
-for file_name in fileList:
-    counter+=1
-    text = file_contents(folder+"\\"+file_name)
-    entry=((counter,file_name,text))
-    conn.execute("INSERT OR IGNORE INTO texts VALUES(?,?,?)",entry)
-    conn.commit()
+counter=0                                                               #start a counter - this becomes document ID
+for file_name in fileList:                                              #loop through file names
+    counter+=1                                                          #Add 1 to the counter on each loop
+    text = file_contents(folder+"\\"+file_name)                         #read in the files
+    entry=((counter,file_name,text))                                    #make tuple called entry
+    conn.execute("INSERT OR IGNORE INTO texts VALUES(?,?,?)",entry)     #SQL statement
+    conn.commit()                                                       #Commit the statement
 
 
 #the eagle eyed will have noted that this is a pretty inefficent method - we are entering texts into the database individually. We can use a list of entries instead; this gives a performance boost:
-holder=[]
+holder=[]                                                               #Holder is a list
 for file_name in fileList:
     counter+=1
     text = file_contents(folder+"\\"+file_name)
     entry=((counter,file_name,text))
-    holder.append(entry)
+    holder.append(entry)                                                #Add each entry to the holder
 
-conn.executemany("INSERT OR REPLACE INTO texts VALUES(?,?,?)",holder)
-conn.commit()
+conn.executemany("INSERT OR REPLACE INTO texts VALUES(?,?,?)",holder)   #Add all the entries in one go
+conn.commit()                                                           #Don't forget to write the changes!
 
 #Now, we may have many files to archive, so let's not assume they would all fit into memory; instead we will set the code to
 #archive every 100 entries, and then reset the holder. To ensure that any residual texts are also entered, we keep the final executemany command:
@@ -54,15 +54,14 @@ for file_name in fileList:
     text = file_contents(folder+"\\"+file_name)
     entry=((counter,file_name,text))
     holder.append(entry)
-    if counter ==100:
-        conn.executemany("INSERT OR REPLACE INTO texts VALUES(?,?,?)",holder)
-        conn.commit()
-        holder
+    if counter ==100:                                                               #When the counter reaches 100....
+        conn.executemany("INSERT OR REPLACE INTO texts VALUES(?,?,?)",holder)       #we write the contents of the holder
+        conn.commit()                                                               
+        holder =[]                                                                  #Reset the holder
+        counter=0                                                                   #Reset the counter
 conn.executemany("INSERT OR REPLACE INTO texts VALUES(?,?,?)",holder)
 conn.commit()
 
-
-#retrieval
 #get one entry:
 ID,file_name,text=c.execute("SELECT id,file_name,content from texts").fetchone()
 
