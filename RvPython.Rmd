@@ -1,3 +1,5 @@
+[EDIT NOV2013: this is a draft version of a deleted blog post. Consider the following very rough work -RF]
+
 R and Python
 
 Calling other languages from within R is not perhaps the most efficient way to achieve complex tasks. However, while data scientists may be fluent in multiple languages, and would have no problem moving between them at will, I doubt that most social scientists and other researchers tend to be. Real-world languages get rusty when we don't use them regularly, and so do coding languages. Of course, ideally we'd want to improve our skills, but sometimes researchers are more interested in getting to the findings than in practicing methods. 
