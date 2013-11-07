@@ -1,0 +1,182 @@
+R and Python
+
+Calling other languages from within R is not perhaps the most efficient way to achieve complex tasks. However, while data scientists may be fluent in multiple languages, and would have no problem moving between them at will, I doubt that most social scientists and other researchers tend to be. Real-world languages get rusty when we don't use them regularly, and so do coding languages. Of course, ideally we'd want to improve our skills, but sometimes researchers are more interested in getting to the findings than in practicing methods. 
+
+Recently, following the release of the GDELT data, this became very clear to me: a number of tutorials about accessing the data in R and Python were written, but most users of these were clearly more comfortable with one language than the other. This post will demonstrate how to access the GDELT data all from within the R console, as an example of how python scripts might be called in R. There is nothing especially new about this [see e.g. here](http://www.r-chart.com/2010/06/if-you-want-to-interact-with-other.html) and I make no claims to originality. I hope though that the functions developed below may be of some small use to researchers trying to handle this data
+
+0th-ly: this only works for Windows
+
+Firstly let's make sure Python is installed on the system. I think the gdelt scripts provided require python 2.7
+
+Second, lets download and unpack the data 
+
+Third let's store some variables about the data we want to extract:
+
+```{r}
+actor1  <-  "RUS"
+actor2  <-  "USA"
+yearList  <-  c(1980:1995)
+dataLocation  <-  "c:/users/rolf/documents/gdelt/data/"
+pythonLocation  <-  "c:/python2732/python.exe" #Just in case 
+```
+
+Now let's make a function that will run the Python script provided by Leetaru and Schrodt. This works by calling the commandline application from within R.
+
+```{r, eval=F}
+saveGDELT <- function(actor1,actor2,yearList,dataLocation,pythonLocation){
+	
+	#load in file names from GDELT directory
+	files  <-  dir(dataLocation)
+	
+	#iterate over the years selected:
+	for (i in yearList){
+	  system(paste0(pythonLocation," ",dataLocation,"gdelt.select.py -src ",actor1," -tar ",actor2, " -i ",dataLocation,grep(paste0(i,".reduced"),files,value=T), " -o ",dataLocation,actor1,actor2,i))
+	  }
+ }
+saveGDELT(actor1,actor2,yearList,dataLocation,pythonLocation)
+```
+
+Phew, that last line is pretty hefty. Here is a breakdown of how it works:
+1) paste0: paste in the following values with no spaces, commas or anything between them
+2) pythonLocation: tells the commandline where to look for the executable (sometimes Windows knows where to look, but not always)
+3) dataLocation,"gdelt.select.py: where to look for the script to be executed
+4) -src ",actor1," -tar ",actor2, : options required by the python script. src=source, tar= target. We specify these by our pre-assigned actor codes
+5) -i ",dataLocation,grep(paste0(i,".reduced"),files,value=T) : -i is for input. The subsequen string uses grep to look for the year we are interested in (we loop through these, remember) in a pre-loaded list of the files in the data directory.
+6) -o ",dataLocation,actor1,actor2,i : -o specifies output. We tell it where to save our file, and add on actor 1,2, and the relevant year. This prevents files being overwritten as we loop through
+
+
+After running the function above we have the data save in files "RUSUSA1989" etc. We now need to load these  into R, and save them in R's native format:
+
+```{r eval=F}
+processGDELT <- function(actor1,actor2,yearList,dataLocation,pythonLocation){
+	gdelt=NULL
+	for (i in yearList){
+	  gdelt <- rbind(gdelt,read.table(paste0(dataLocation,actor1,actor2,i),sep="\t"))
+	}
+
+	#format the columns
+	colnames(gdelt) <- c("Day", "Actor1Code", "Actor2Code", "EventCode", "QuadCategory", "GoldsteinScale", "Actor1Geo_Lat", "Actor1Geo_Long", "Actor2Geo_Lat", "Actor2Geo_Long", "ActionGeo_Lat", "ActionGeo_Long")
+
+	#Format the dates
+	library(lubridate)
+	gdelt$Day <- ymd(gdelt$Day)
+
+	#save the data
+	save(gdelt, file = paste0(actor1,actor2,".Rdata"))
+}	
+processGDELT(actor1,actor2,yearList,dataLocation,pythonLocation)
+```
+
+That's all that needs to be done with the command line and Python. Much of the data reshaping might be quicker in Python, but from here on we can use R alone, if we so like. Just to illustrate what we might do with this data, I've added a couple of functions below.
+
+```{r fig.width=11,fig.height=5,dev='CairoPNG',message=F,warning=F}
+#load the data
+load(paste0(actor1,actor2,".Rdata"))
+
+mapGDELT  <- function(df=gdelt,actor1,actor2,title)   {
+  #load packages
+  require(plyr)
+  require(ggplot2)  
+  require(lubridate)
+  
+  df$year <- year(df$Day)
+
+  #reshape data as count data
+  df$count <- 1
+  df2 <- ddply(df,.(year,ActionGeo_Long,ActionGeo_Lat,EventCode),summarize,count=sum(count))
+  
+  #get a (crude) map and plot it
+  worldMap <- map_data("world")  # Easiest way to grab a world map shapefile
+  p<- ggplot(worldMap) + geom_path(aes(x = long, y = lat, group = group), colour = gray(2/3), lwd = 1/3)
+  p <- p+geom_point(data=df2,aes(ActionGeo_Long,ActionGeo_Lat,size=log(count)+1,colour=as.character(EventCode)),alpha=.6)+
+      theme_minimal()+
+      ggtitle(title)+ylim(c(-75,75))
+  p
+}
+
+mapGDELT(gdelt,actor1,actor2,"RUS-USA 1989:1991")
+```
+
+OK, so the map is not as nice as [these](http://quantifyingmemory.blogspot.co.uk/2013/04/mapping-gdelt-data-in-r-and-some.html) [ones](http://nbviewer.ipython.org/urls/raw.github.com/dmasad/GDELT_Intro/master/GDELT_Mapping.ipynb), but you get the idea. The most important thing it illustrates, apart from where the RUS-USA events of 89-91 took place, is that the GDELT data is split up into a large number of smaller events - so much so that the legend is uselless. Consequently, after loading the data you might want to limit which eventcodes are included. 
+
+What are these event codes, I hear you say? They follow [the Cameo coding scheme](http://web.ku.edu/~keds/cameo.dir/CAMEO.CDB.09b5.pdf), and are basically a list of numbers to which a particular event is assigned (this is [sometimes imperfect]http://quantifyingmemory.blogspot.co.uk/2013/04/big-geo-data-visualisations.html, as the event codes are determined by automated tagging)
+
+You could replace the numbers with their description, but you could also use the function below to do this for you, as well as use the incredible [Ramnath Vaidyanathan's](https://github.com/ramnathv) rCharts package to visualise which event types are most common:
+
+```{r echo=T, eval=F}
+#if you don't have rCharts installed already,do
+require devtools
+install_github('rCharts', 'ramnathv')
+
+```
+
+```{r comment="", message=F,eval=F}
+#read in event descriptions from my dropbox. You might want to save this to disk
+require(RCurl)
+cameoURL <- "http://dl.dropboxusercontent.com/u/23020355/cameoCodingScheme.csv"
+cameo <- read.table(cameoURL,sep=",",header=T)
+chartGDELT <- function(df=gdelt,nEvents=10){
+  require(plyr)
+  require(lubridate)
+  require(rCharts)
+
+  #clean up some typos
+  cameo$description <- gsub("\\?","fi",cameo$description)
+  
+  #make count data. This clunky form needed for plotting.
+  df$count <- 1
+  df$month <- month(df$Day)
+  df$year  <- year(df$Day)
+  df$month <- round((as.numeric(df$month)-1)*(100/12))
+  df$month <- paste0(df$year,".",df$month)
+  df$month <- as.numeric(df$month)
+   
+  monthTypeData <- ddply(df,.(month,EventCode),summarize, count=(sum(count)))
+  monthTypeData$EventCode <- as.character(monthTypeData$EventCode)    
+
+  #trim the data
+  monthTypeData <- monthTypeData[monthTypeData$EventCode %in% (rownames(tail(sort(table(df$EventCode)),nEvents))) ,]
+  
+  #Add in event descriptions
+  monthTypeData$EventCode <- cameo$description[match(monthTypeData$EventCode,cameo$id)] 
+ 
+  #plot the data
+  p1 <- nvd3Plot(count ~ month,group='EventCode' ,type='lineChart',data=monthTypeData)
+  p1$xAxis(axisLabel = 'Year')
+  p1$yAxis(axisLabel = 'Count')
+  p1$addParams(width = 1000, height = 800)
+  p1
+
+}
+
+chartGDELT(gdelt,20)
+```
+
+the nice thing about these rCharts is that the javascript makes them interactive. The graph above is a bit messy, but click and play a bit, and you can zoom in, turn off less interesting categories, etc.
+
+That's it really. I added all the little bits together to test system time, and to show how compressed this code can be:
+
+
+```{r eval=F}
+all <- function(){
+  actor1  <-  "RUS"
+  actor2  <-  "USA"
+  yearList  <-  c(1989,1990,1991)
+  dataLocation  <-  "c:/users/rolf/documents/gdelt/data/"
+  pythonLocation  <-  "c:/python2732/python.exe" #Just in case 
+  
+  saveGDELT(actor1,actor2,yearList,dataLocation,pythonLocation)
+  processGDELT(actor1,actor2,yearList,dataLocation,pythonLocation)
+  load(paste0(actor1,actor2,".Rdata"))
+  print(mapGDELT(df=gdelt,actor1,actor2,title="RUS-USA 1989:1991"))
+  print(chartGDELT(df=gdelt,nEvents=10))
+}
+
+system.time(all())
+```
+
+As you can see I wrapped system.time around the whole chunk above. I had to stop the timing manually because rCharts uses Shiny, but these are the results from my old laptop:
+
+Timing stopped at: 14.99 0.64 32.17 
+
+Not too shabby, just over half a minute to extract and visualise all links for three years between two-superpowers. When you add that these visualisations are a) on a map, and b) interactive, I think I'll consider myself fairly satisified!
