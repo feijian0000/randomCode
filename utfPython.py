@@ -1,4 +1,3 @@
-
 import codecs
 def file_contents(file_name):
     with codecs.open(file_name,encoding="utf-8") as f:
@@ -13,6 +12,6 @@ writer=open("my_out_file.txt",'w+') # w+ means overwrite - use with care
 writer.close()
 
 exampleLookup <- function(path){
-	text=system(paste0("python exampleLookup.py ",path"),intern=T)
+	text=system(paste0("python exampleLookup.py ",path),intern=T)
 	return (text)
 }
